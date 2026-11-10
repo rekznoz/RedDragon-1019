@@ -77,7 +77,13 @@ namespace RankTemp
 
         public void Send(float? cpuTemperature, float? pumpRpm, float? cpuFanRpm)
         {
-            Exchange(port, Encode(cpuTemperature, pumpRpm, cpuFanRpm), 0x21);
+            try { Exchange(port, Encode(cpuTemperature, pumpRpm, cpuFanRpm), 0x21); }
+            catch
+            {
+                try { Dispose(); }
+                catch (Exception) { /* Keep the original serial error. */ }
+                throw;
+            }
         }
 
         internal static byte[] Encode(float? cpuTemperature, float? pumpRpm, float? cpuFanRpm)
