@@ -32,6 +32,11 @@ namespace RankTemp
         private readonly Label sensorStatus = NewLabel("Buscando sensores…", 10);
         private readonly LinkLabel sensorAccess = new LinkLabel { LinkColor = Theme.Accent, ActiveLinkColor = Theme.Text,
             VisitedLinkColor = Theme.Accent, Dock = DockStyle.Fill };
+        private readonly LinkLabel startupUpdate = new LinkLabel
+        {
+            Text = "Actualizar copia de inicio", LinkColor = Theme.Accent, ActiveLinkColor = Theme.Text,
+            VisitedLinkColor = Theme.Accent, Dock = DockStyle.Fill, Visible = false
+        };
         private readonly SensorRow[] rows =
         {
             new SensorRow("Cpu", "Temperatura de CPU", "°C", Theme.Accent),
@@ -43,12 +48,17 @@ namespace RankTemp
         private bool startHidden;
         private bool started;
         private bool connected;
+        private bool synchronizing;
         private bool busy;
         private bool connectionPending;
         private bool closeWhenIdle;
         private bool activationOffered;
         private bool restoringWindow;
+        private bool startupSettingLoaded;
         private string rememberedPort;
+        private SensorReading[] temperatures = Array.Empty<SensorReading>();
+        private SensorReading[] fans = Array.Empty<SensorReading>();
+        private string sensorError;
 
         public RankTempForm(bool offerActivation, bool startInTray)
         {
@@ -122,15 +132,19 @@ namespace RankTemp
             footer.Controls.Add(startup, 1, 0);
             sensorAccess.LinkClicked += (sender, args) => ActivateSensors();
             footer.Controls.Add(sensorAccess, 0, 1);
+            startupUpdate.LinkClicked += (sender, args) => UpdateStartupCopy();
+            footer.Controls.Add(startupUpdate, 1, 1);
             Add(layout, footer, 64);
             UpdateSensorAccess(null);
-            LoadStartupSetting();
+            startup.Enabled = false;
+            startup.Click += (sender, args) => ChangeStartupSetting();
 
             LoadSelections();
             refresh.Click += (sender, args) => RefreshPorts();
             ports.SelectedIndexChanged += (sender, args) => UpdateButtons();
             connect.Click += async (sender, args) => await ChangeConnectionAsync();
             timer.Tick += async (sender, args) => await PollAsync();
+            VisibleChanged += (sender, args) => LoadStartupSetting();
             Shown += async (sender, args) => await StartAsync();
             FormClosing += CloseWhenReady;
         }
@@ -183,10 +197,17 @@ namespace RankTemp
 
         private void LoadStartupSetting()
         {
-            startup.Enabled = elevated;
-            try { startup.Checked = WindowsStartup.IsEnabled(); }
+            if (!Visible || startupSettingLoaded) return;
+            startupSettingLoaded = true;
+            try { ShowStartupState(WindowsStartup.ReadState()); }
             catch (Exception) { startup.Enabled = false; }
-            startup.Click += (sender, args) => ChangeStartupSetting();
+        }
+
+        private void ShowStartupState(StartupState state)
+        {
+            startup.Checked = state.Enabled;
+            startup.Enabled = elevated;
+            startupUpdate.Visible = elevated && state.CanUpdate;
         }
 
         private void ChangeStartupSetting()
@@ -205,6 +226,7 @@ namespace RankTemp
             {
                 WindowsStartup.SetEnabled(enable);
                 SaveSelections();
+                startupUpdate.Visible = false;
             }
             catch (Exception ex)
             {
@@ -214,12 +236,31 @@ namespace RankTemp
             }
         }
 
+        private void UpdateStartupCopy()
+        {
+            try
+            {
+                UseWaitCursor = true;
+                WindowsStartup.Update();
+                SaveSelections();
+                startupUpdate.Visible = false;
+                MessageBox.Show(this, "La nueva versión se abrirá la próxima vez que inicies sesión. Se han conservado el puerto y los sensores.",
+                    "RankTemp · Actualización", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, ex.Message, "RankTemp · Actualización", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally { UseWaitCursor = false; }
+        }
+
         private void RestoreWindow()
         {
             if (closeWhenIdle) return;
             restoringWindow = true;
             try
             {
+                RefreshReadings(true);
                 Show();
                 WindowState = FormWindowState.Normal;
                 Activate();
@@ -298,15 +339,22 @@ namespace RankTemp
                 connected = false;
                 SetStatus("No se pudo abrir la conexión · " + ex.Message, false);
             }
-            finally { connectionPending = false; FinishWork(); }
+            finally
+            {
+                connectionPending = false;
+                if (!closeWhenIdle) UpdateButtons();
+                FinishWork();
+            }
         }
 
         private async Task ConnectAsync(PortChoice choice)
         {
             await Task.Run(() => device.Connect(choice.Name));
             connected = true;
+            synchronizing = false;
             rememberedPort = choice.IsCh340 ? choice.Name : null;
             SetStatus("1019 conectado · " + choice.Name, true);
+            if (!connectionPending && !closeWhenIdle) UpdateButtons();
         }
 
         private async Task ReconnectAsync()
@@ -338,30 +386,58 @@ namespace RankTemp
                 }
                 if (closeWhenIdle || connectionPending) return;
 
-                var readings = await Task.Run(() => sensors.Read());
+                SensorReading[] readings;
+                try
+                {
+                    readings = await Task.Run(() => sensors.Read());
+                    sensorError = null;
+                }
+                catch (Exception ex)
+                {
+                    readings = Array.Empty<SensorReading>();
+                    sensorError = ex.Message;
+                }
                 if (closeWhenIdle || connectionPending) return;
-                foreach (var row in rows) row.Refresh(readings);
-                var values = rows.Select(row => row.DisplayValue).ToArray();
-                UpdateSensorAccess(readings);
+                temperatures = readings.Where(reading => reading.IsTemperature).ToArray();
+                fans = readings.Where(reading => !reading.IsTemperature).ToArray();
+                RefreshReadings(Visible);
                 if (connected)
                 {
+                    float? temperature = rows[0].DisplayValue;
+                    float? fan = rows[1].DisplayValue;
+                    float? pump = rows[2].DisplayValue;
                     try
                     {
-                        await Task.Run(() => device.Send(values[0], values[2], values[1]));
-                        SetStatus("1019 conectado · " + ((PortChoice)ports.SelectedItem).Name + " · Sincronizando", true);
+                        await Task.Run(() => device.Send(temperature, pump, fan));
+                        if (!synchronizing && !closeWhenIdle)
+                        {
+                            synchronizing = true;
+                            SetStatus("1019 conectado · " + ((PortChoice)ports.SelectedItem).Name + " · Sincronizando", true);
+                        }
                     }
                     catch (Exception ex)
                     {
                         connected = false;
-                        try { device.Dispose(); }
-                        catch (Exception) { /* Preserve the failure that ended synchronization. */ }
                         reconnectDelay.Restart();
                         SetStatus("Sincronización interrumpida · " + ex.Message, false);
+                        if (!connectionPending && !closeWhenIdle) UpdateButtons();
                     }
                 }
             }
             catch (Exception ex) { sensorStatus.Text = "No se pudieron leer los sensores · " + ex.Message; }
             finally { FinishWork(); }
+        }
+
+        private void RefreshReadings(bool render)
+        {
+            rows[0].Refresh(temperatures, render);
+            rows[1].Refresh(fans, render);
+            rows[2].Refresh(fans, render);
+            if (!render) return;
+
+            UpdateSensorAccess(temperatures.Any(reading => reading.Value.HasValue) ||
+                fans.Any(reading => reading.Value.HasValue));
+            if (sensorError != null) sensorStatus.Text = "No se pudieron leer los sensores · " + sensorError;
         }
 
         private void SetStatus(string message, bool active)
@@ -387,8 +463,7 @@ namespace RankTemp
         private void FinishWork()
         {
             busy = false;
-            if (closeWhenIdle) Close();
-            else if (!connectionPending) UpdateButtons();
+            if (closeWhenIdle && !IsDisposed) Close();
         }
 
         private void CloseWhenReady(object sender, FormClosingEventArgs args)
@@ -451,7 +526,7 @@ namespace RankTemp
             catch (UnauthorizedAccessException) { }
         }
 
-        private void UpdateSensorAccess(SensorReading[] readings)
+        private void UpdateSensorAccess(bool? readingsAvailable)
         {
             bool driverReady = SensorMonitor.DriverReady;
             sensorAccess.Visible = driverReady ? !elevated : SensorMonitor.HasBundledDriver;
@@ -462,8 +537,8 @@ namespace RankTemp
                     : "Algunas lecturas requieren acceso a los sensores de la placa.";
             else if (!elevated)
                 sensorStatus.Text = "Algunos sensores requieren permisos de administrador.";
-            else if (readings != null)
-                sensorStatus.Text = readings.Any(reading => reading.Value.HasValue)
+            else if (readingsAvailable.HasValue)
+                sensorStatus.Text = readingsAvailable.Value
                     ? "Lecturas de la placa actualizadas."
                     : "La placa no ha devuelto lecturas de temperatura ni de RPM.";
         }
@@ -534,7 +609,6 @@ namespace RankTemp
         {
             private readonly ComboBox selector = new DashboardComboBox();
             private readonly Label readout;
-            private string[] shownIds = new string[0];
             private bool refreshing;
             private float? reading;
 
@@ -585,9 +659,8 @@ namespace RankTemp
                 };
             }
 
-            public void Refresh(SensorReading[] readings)
+            public void Refresh(SensorReading[] choices, bool render)
             {
-                var choices = readings.Where(item => item.IsTemperature == (Key == "Cpu")).ToArray();
                 if (SensorId == null)
                 {
                     var available = choices.Where(item => item.Value.HasValue).ToArray();
@@ -600,24 +673,33 @@ namespace RankTemp
                     else if (named.Length == 1) SensorId = named[0].Id;
                 }
 
-                var ids = choices.Select(item => item.Id).ToArray();
-                int selectedIndex = Array.IndexOf(ids, SensorId) + 1;
-                if (!shownIds.SequenceEqual(ids) || selector.SelectedIndex != selectedIndex)
+                int index = Array.FindIndex(choices, item => item.Id == SensorId);
+                reading = index < 0 ? null : choices[index].Value;
+                if (!render) return;
+
+                bool rebuild = selector.Items.Count != choices.Length + 1;
+                for (int item = 0; !rebuild && item < choices.Length; item++)
+                {
+                    var previous = (SensorReading)selector.Items[item + 1];
+                    rebuild = previous.Id != choices[item].Id || previous.Name != choices[item].Name;
+                }
+                int selectedIndex = index + 1;
+                if (rebuild || selector.SelectedIndex != selectedIndex)
                 {
                     refreshing = true;
                     selector.BeginUpdate();
                     try
                     {
-                        selector.Items.Clear();
-                        selector.Items.Add("Sin asignar");
-                        selector.Items.AddRange(choices);
+                        if (rebuild)
+                        {
+                            selector.Items.Clear();
+                            selector.Items.Add("Sin asignar");
+                            selector.Items.AddRange(choices);
+                        }
                         selector.SelectedIndex = selectedIndex;
-                        shownIds = ids;
                     }
                     finally { selector.EndUpdate(); refreshing = false; }
                 }
-                var current = choices.FirstOrDefault(item => item.Id == SensorId);
-                reading = current == null ? null : current.Value;
                 readout.Text = reading.HasValue ? reading.Value.ToString(Key == "Cpu" ? "0.0" : "0") : "—";
             }
 
