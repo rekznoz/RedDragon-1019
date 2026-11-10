@@ -6,6 +6,8 @@ Aplicación en desarrollo para la refrigeración Redragon 1019 en Windows. El pr
 
 Extrae `dist/RankTemp-Windows-x64.zip` en el PC del 1019 y abre `RankTemp.exe` con CpuTemp cerrado. La interfaz preselecciona el puerto cuando Windows expone un solo CH340 con el identificador del 1019. Puedes seleccionar el puerto manualmente si hay varios. La conexión se valida con el saludo antes de sincronizar.
 
+Si ya tienes activado **Iniciar RankTemp con Windows**, sal de RankTemp desde la bandeja, extrae la nueva versión y ábrela. Pulsa **Actualizar copia de inicio** para que Windows use esa versión al iniciar sesión. RankTemp conserva el puerto y los sensores guardados.
+
 RankTemp lee la temperatura de CPU y las RPM con LibreHardwareMonitor 0.9.6. La edición con PawnIO ofrece instalar el controlador en el primer arranque si hace falta. Después de aceptar el aviso de Windows, RankTemp instala el controlador en segundo plano y vuelve a abrirse. Si pospones la instalación, puedes retomarla con **Activar sensores**. [PawnIO 2.2.0](https://github.com/namazso/PawnIO.Setup/releases/tag/2.2.0)
 
 Puedes elegir qué sensor corresponde al ventilador y a la bomba. La placa debe exponer las RPM de cada conexión para poder leerlas. Una temperatura de CPU de 0 °C se trata como una lectura ausente. Se envía `FFFF` cuando falta una lectura o está desmarcada, y en los dos campos finales, cuya función queda por verificar.
