@@ -16,8 +16,9 @@ RankTemp · Redragon 1019
 6. Marca «Iniciar RankTemp con Windows» si quieres que abra en la bandeja
    al iniciar sesión. RankTemp guarda una copia en Archivos de programa y
    crea una tarea para tu cuenta. Desmarca la casilla para borrar la tarea.
-   Para actualizar esa copia, desmarca la casilla, sal de RankTemp y vuelve
-   a marcarla desde el ejecutable del ZIP nuevo.
+   Para actualizar esa copia, sal de RankTemp desde la bandeja y abre el
+   ejecutable del ZIP nuevo. Pulsa «Actualizar copia de inicio» si aparece.
+   Se conservan el puerto, los sensores y el inicio con Windows.
 
 Los sensores disponibles dependen de la placa y de cómo esté conectada
 la refrigeración. Selecciona «Sin asignar» si la placa no expone sus RPM.
