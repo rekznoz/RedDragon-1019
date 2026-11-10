@@ -1,0 +1,37 @@
+RankTemp · Redragon 1019
+
+1. Extrae la carpeta RankTemp completa del ZIP.
+2. En el PC del 1019, cierra CpuTemp, incluido su icono junto al reloj.
+3. Abre RankTemp.exe. La primera vez, comprueba el puerto del CH340 y
+   pulsa Conectar. Si cierras RankTemp con el 1019 conectado, volverá a
+   conectar al mismo puerto la próxima vez. Desconectar borra el puerto
+   recordado. Si se pierde la conexión, RankTemp volverá a buscar el 1019
+   en ese puerto. Pulsa «Cancelar» para detener los intentos.
+4. Elige los sensores que correspondan a las conexiones de tu placa base.
+   La casilla Mostrar activa o esconde esa lectura en la pantalla del 1019.
+   Una lectura ausente se muestra como un guion en RankTemp.
+5. Minimiza la ventana para seguir sincronizando desde la bandeja de Windows.
+   Haz doble clic en el icono para volver a abrir RankTemp o usa «Salir»
+   en su menú para cerrar el programa.
+6. Marca «Iniciar RankTemp con Windows» si quieres que abra en la bandeja
+   al iniciar sesión. RankTemp guarda una copia en Archivos de programa y
+   crea una tarea para tu cuenta. Desmarca la casilla para borrar la tarea.
+   Para actualizar esa copia, desmarca la casilla, sal de RankTemp y vuelve
+   a marcarla desde el ejecutable del ZIP nuevo.
+
+Los sensores disponibles dependen de la placa y de cómo esté conectada
+la refrigeración. Selecciona «Sin asignar» si la placa no expone sus RPM.
+
+Si RankTemp ofrece activar los sensores al abrirlo, acepta la instalación
+del controlador y el aviso de administrador de Windows. RankTemp volverá
+a abrirse al terminar. Si lo pospones, puedes usar «Activar sensores».
+En las siguientes aperturas, RankTemp solicitará el permiso de
+administrador si lo necesita para leer los sensores con PawnIO.
+
+Requisitos: Windows x64 y .NET Framework 4.7.2 o posterior.
+RankTemp usa LibreHardwareMonitorLib 0.9.6. Código fuente y licencia:
+https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/tree/v0.9.6
+
+Controlador opcional PawnIO 2.2.0 y su instalador oficial:
+https://github.com/namazso/PawnIO.Setup/releases/tag/2.2.0
+Código fuente del controlador: https://github.com/namazso/PawnIO
