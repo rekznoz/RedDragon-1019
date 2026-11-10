@@ -63,25 +63,25 @@ namespace RankTemp
 
         public SensorReading[] Read()
         {
-            if (computer == null)
+            try
             {
-                var instance = new Computer { IsCpuEnabled = true, IsMotherboardEnabled = true };
-                try
+                if (computer == null)
                 {
-                    instance.Open();
-                    computer = instance;
+                    computer = new Computer { IsCpuEnabled = true, IsMotherboardEnabled = true };
+                    computer.Open();
                 }
-                catch
-                {
-                    instance.Close();
-                    throw;
-                }
-            }
 
-            var readings = new List<SensorReading>();
-            foreach (IHardware hardware in computer.Hardware) ReadHardware(hardware, readings);
-            return readings.OrderBy(sensor => sensor.Name, StringComparer.CurrentCultureIgnoreCase)
-                .ThenBy(sensor => sensor.Id, StringComparer.Ordinal).ToArray();
+                var readings = new List<SensorReading>();
+                foreach (IHardware hardware in computer.Hardware) ReadHardware(hardware, readings);
+                return readings.OrderBy(sensor => sensor.Name, StringComparer.CurrentCultureIgnoreCase)
+                    .ThenBy(sensor => sensor.Id, StringComparer.Ordinal).ToArray();
+            }
+            catch
+            {
+                try { Dispose(); }
+                catch (Exception) { /* Keep the original sensor error. */ }
+                throw;
+            }
         }
 
         private static void ReadHardware(IHardware hardware, List<SensorReading> readings)
@@ -109,8 +109,9 @@ namespace RankTemp
 
         public void Dispose()
         {
-            if (computer != null) computer.Close();
+            var instance = computer;
             computer = null;
+            if (instance != null) instance.Close();
         }
     }
 }
